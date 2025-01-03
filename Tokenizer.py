@@ -38,26 +38,40 @@ def detectBigrams(text):
 
     return frequentBigrams
 
+def preProcessing(data, weighting):
+    noPunct = data.translate(str.maketrans("", "", string.punctuation))
+    tokens = word_tokenize(noPunct) 
+    lowercaseTokens = [token.lower() for token in tokens]
+   
+    nlpDoc = nlp(" ".join(lowercaseTokens))
+    counter = Counter(lowercaseTokens)
+    cleanedTokens = [(token.lemma_, counter[token.text] * weighting) for token in nlpDoc]
+
+    bigrams = detectBigrams(lowercaseTokens)
+    counter = Counter(bigrams)
+    for bigram in bigrams:
+        cleanedTokens.append((bigram, counter[bigram] * weighting))
+
+    return cleanedTokens
 
 
 def Tokenizor(docID, text):
     soup = BeautifulSoup(text, 'html.parser')
-    body = soup.find("body")
-    text = body.get_text(separator = " | ", strip = True)
-    noPunct = text.translate(str.maketrans("", "", string.punctuation))
-    tokens = word_tokenize(noPunct) 
-    lowercaseTokens = [token.lower() for token in tokens]
-    docsID[docID]["count"] = len(lowercaseTokens)
-    nlpDoc = nlp(" ".join(lowercaseTokens))
-    counter = Counter(lowercaseTokens)
-    cleanedTokens = [(token.lemma_, counter[token.text]) for token in nlpDoc]
     
-    bigrams = detectBigrams(lowercaseTokens)
-    counter = Counter(bigrams)
-    for bigram in bigrams:
-        cleanedTokens.append((bigram, counter[bigram]))
+    body = soup.find("body").get_text(separator = " | ", strip = True) 
+    title = soup.find("title").get_text(strip=True) if soup.find("title") else ""
+    contentTitles = soup.find_all(class_="contenttitle")
+    contentTitlesText = "".join(contenttitle.get_text(strip = True) for contenttitle in contentTitles)
 
-    return set(cleanedTokens)
+    tokens = []
+    
+    tokens = tokens + preProcessing(body, 1)
+    tokens = tokens + preProcessing(contentTitlesText, 2)
+    tokens = tokens + preProcessing(title, 3)
+
+    docsID[docID]["count"] = len(tokens)
+    
+    return set(tokens)
 
 
 def addToDict(tokenArray):
@@ -77,7 +91,9 @@ def createPostingsAndVocab():
             with open(f"videogames/ps2.gamespy.com/{docsID[document]['name']}", "r") as file:
                 tokens = Tokenizor(document, file)
                 addToDict(tokens)
-                print(tokens)
+
+                if document == 200:
+                    print(f"Document 200: {docsID[document]}\n Tokens: {tokens}")
 
                 for token in tokens:
                     wordID = vocab.get(token[0])
@@ -92,8 +108,6 @@ def createPostingsAndVocab():
 
 createDocsID()
 createPostingsAndVocab()
-
-
 
 with open("docsID.pkl", "wb") as file:
     pickle.dump(docsID, file)
