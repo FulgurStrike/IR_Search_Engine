@@ -1,9 +1,19 @@
 import pickle
-from nltk.tokenize import word_tokenize
+import nltk
+from nltk.tokenize import word_tokenize, sent_tokenize
 import spacy
 import math
 import string
 import numpy as np
+from nltk.corpus import stopwords, wordnet
+from nltk import pos_tag
+from bs4 import BeautifulSoup
+
+nltk.download('wordnet')
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('tagsets')
 
 
 nlp = spacy.load("en_core_web_sm")
@@ -17,8 +27,6 @@ with open("vocab.pkl", "rb") as file:
 with open("postings.pkl", "rb") as file:
     postings = pickle.load(file)
 
-
-print(postings[vocab["ps2"]])
 
 def calculateTFIDF(termCount, totalWords, df):
     tf = (termCount) / (totalWords)
@@ -53,7 +61,20 @@ def generateDocTFIDF(document, vocabID):
 
     return tfIDF
 
+def queryExpansion(tokenisedQuery):
+    tags = pos_tag(tokenisedQuery)
 
+    nouns = [tag[0] for tag in tags if tag[1] in ['NN', 'NNS', 'NNP', 'NNPS']]
+
+    sysnetObjects = [wordnet.synsets(noun) for noun in nouns]
+
+    lemmas = [lemma for lemmaList in sysnetObjects for obj in lemmaList for lemma in obj.lemmas()]
+
+    expandedQuery = set(tokenisedQuery + [lemma.name() for lemma in lemmas])
+
+    filteredQuery = list(filter(lambda term: term in vocab.keys(), expandedQuery))
+
+    return filteredQuery
 
 
 def eucLength(matrix):
@@ -64,13 +85,23 @@ def sim(query, doc):
     queryLen = eucLength(query)
     docLen = eucLength(doc)
 
-   
-
     denominator = docLen * queryLen
-    print(f"num: {numerator} | denom: {denominator}")
     similarity = numerator / denominator
 
     return similarity
+
+def display(file):
+    file = open(f"videogames/ps2.gamespy.com/{file}")
+    soup = BeautifulSoup(file, 'html.parser')
+    body = soup.find("div", {"id": "content"}).get_text(separator = " | ", strip = True)
+
+    sentences = sent_tokenize(body)
+    content = " ".join(sentences[:3]).replace("|", "").strip()
+
+    file.close()
+
+    return content
+
 
 while True:
     query = input("What would you like to query? (type quit to exit) ")
@@ -79,14 +110,14 @@ while True:
 
     noPunct = query.translate(str.maketrans("", "", string.punctuation))
     tokenisedQuery = word_tokenize(noPunct.lower())
-    nlpDoc = nlp(" ".join(tokenisedQuery))
-    lemmatizedQuery = [query.lemma_ for query in nlpDoc]
-    
+    expandedQuery = queryExpansion(tokenisedQuery)
+    print(expandedQuery)
+
     try:
 
         rankedDocs = []
-        if len(lemmatizedQuery) == 1:
-            term = lemmatizedQuery[0]
+        if len(expandedQuery) == 1:
+            term = expandedQuery[0]
             vocabID = vocab[term]
             documents = postings[vocabID]
             for document in documents:
@@ -98,40 +129,36 @@ while True:
                 rankedDocs.append((docId, tfIDF))
         else: 
             results = {}
-            for tokenQuery in lemmatizedQuery:
+            for tokenQuery in expandedQuery:
                 if tokenQuery in vocab:
                     vocabID = vocab[tokenQuery]
                     documents = postings[vocabID]
                     results[vocabID] = documents
 
             finalisedDocList = set()
-            for term in lemmatizedQuery:
+            for term in expandedQuery:
                 vocabID = vocab[term]
                 documents = results[vocabID]
                 documentIDs = {doc[0] for doc in documents if doc[1] > 0}
                 finalisedDocList = finalisedDocList.union(documentIDs)
 
-            print(finalisedDocList)
-
             docVector = {}
-            queryVector = generateQueryVector(lemmatizedQuery)
+            queryVector = generateQueryVector(expandedQuery)
 
             for document in finalisedDocList:
                 docVector[document] = []
-                for term in lemmatizedQuery:
+                for term in expandedQuery:
                     vocabID = vocab[term]
                     docVector[document].append(generateDocTFIDF(document, vocabID))
-
             
             for document in docVector:
                 similarity = sim(queryVector, docVector[document])
                 rankedDocs.append((document, similarity))
 
-
         rankedDocs = sorted(rankedDocs, key=lambda x: x[1], reverse=True)
         print("\n")
         for document in rankedDocs[:10]:
-            print(f"{docsID[document[0]]['name']} | {document[1]}")
+            print(f"{docsID[document[0]]['name']} | {document[1]}\n{display(docsID[document[0]]['name'])}\n")
     
     except Exception as e:
         print(f"Word(s) not found try again! {e}")
