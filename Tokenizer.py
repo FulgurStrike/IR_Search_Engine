@@ -9,7 +9,7 @@ import string
 import spacy
 
 
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_lg")
 
 stops = set(stopwords.words('english'))
 
@@ -28,29 +28,22 @@ def createDocsID():
             count += 1
 
 
-def detectBigrams(text):
-    allBigrams = list(nltk.bigrams(text))
-    frequentBigrams = []
-    freqdist = nltk.FreqDist(allBigrams)
-    for bigram in allBigrams:
-        if freqdist[bigram] >= 10:
-            frequentBigrams.append(bigram)
 
-    return frequentBigrams
-
-def preProcessing(data, weighting):
+def preProcessing(data, zoneWeighting, nerWeighting):
     noPunct = data.translate(str.maketrans("", "", string.punctuation))
-    tokens = word_tokenize(noPunct) 
-    lowercaseTokens = [token.lower() for token in tokens]
-   
-    nlpDoc = nlp(" ".join(lowercaseTokens))
-    counter = Counter(lowercaseTokens)
-    cleanedTokens = [(token.lemma_, counter[token.text] * weighting) for token in nlpDoc]
+    tokens = word_tokenize(noPunct.lower()) 
+    
+    nlpDoc = nlp(" ".join(tokens))
+    namedEntities = nlpDoc.ents
+    lemmatizedTokens = [token.lemma_ for token in nlpDoc]
+    cleanedTokens = Counter(lemmatizedTokens)
 
-    bigrams = detectBigrams(lowercaseTokens)
-    counter = Counter(bigrams)
-    for bigram in bigrams:
-        cleanedTokens.append((bigram, counter[bigram] * weighting))
+    for ent in nlpDoc.ents:
+        nerWeight = nerWeighting.get(ent.label_, 1)
+        cleanedTokens[ent.lemma_] *= nerWeight
+
+    for token in cleanedTokens:
+        cleanedTokens[token] *= zoneWeighting
 
     return cleanedTokens
 
@@ -58,20 +51,22 @@ def preProcessing(data, weighting):
 def Tokenizor(docID, text):
     soup = BeautifulSoup(text, 'html.parser')
     
-    body = soup.find("body").get_text(separator = " | ", strip = True) 
+    body = soup.find("div", {"id": "content"}).get_text(separator = " | ", strip = True) 
     title = soup.find("title").get_text(strip=True) if soup.find("title") else ""
     contentTitles = soup.find_all(class_="contenttitle")
     contentTitlesText = "".join(contenttitle.get_text(strip = True) for contenttitle in contentTitles)
 
-    tokens = []
+    nerWeightings = {"ORG": 3, "PRODUCT": 2, "GPE": 2, "PERSON": 1.5, "DATE": 1.2} 
     
-    tokens = tokens + preProcessing(body, 1)
-    tokens = tokens + preProcessing(contentTitlesText, 2)
-    tokens = tokens + preProcessing(title, 3)
+    bodyTokens = preProcessing(body, 1, nerWeightings)
+    contentTitleTokens = preProcessing(contentTitlesText, 2, nerWeightings)
+    titleTokens = preProcessing(title, 3, nerWeightings)
 
-    docsID[docID]["count"] = len(tokens)
+    combinedTokens = bodyTokens + contentTitleTokens + titleTokens
+
+    docsID[docID]["count"] = sum(combinedTokens.values())
     
-    return set(tokens)
+    return list(combinedTokens.items())
 
 
 def addToDict(tokenArray):
@@ -90,10 +85,8 @@ def createPostingsAndVocab():
         try:
             with open(f"videogames/ps2.gamespy.com/{docsID[document]['name']}", "r") as file:
                 tokens = Tokenizor(document, file)
+                
                 addToDict(tokens)
-
-                if document == 200:
-                    print(f"Document 200: {docsID[document]}\n Tokens: {tokens}")
 
                 for token in tokens:
                     wordID = vocab.get(token[0])
@@ -101,6 +94,7 @@ def createPostingsAndVocab():
                         postings[wordID] = []
                     if document not in postings[wordID]:
                         postings[wordID].append((document, token[1]))
+
                 file.close()
         except Exception as e:
             print(f"Error opening file {e}")
@@ -108,6 +102,8 @@ def createPostingsAndVocab():
 
 createDocsID()
 createPostingsAndVocab()
+
+
 
 with open("docsID.pkl", "wb") as file:
     pickle.dump(docsID, file)
