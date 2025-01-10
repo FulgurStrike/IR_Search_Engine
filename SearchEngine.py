@@ -102,6 +102,64 @@ def display(file):
 
     return content
 
+def singleTermQuery(query):
+    rankedDocs = [] 
+    term = query[0]
+    vocabID = vocab[term]
+    documents = postings[vocabID]
+
+    if len(documents) < 10:
+        difference = 10 - len(documents)
+        allDocuments = list(docsID.keys())
+        usedDocuments = {doc[0] for doc in documents}
+
+        for docId in allDocuments:
+            if docId not in usedDocuments:
+                documents.append((docId, 0))
+                difference -= 1
+                if difference == 0:
+                    break
+    
+    for document in documents:
+        docId = document[0]
+        totalWords = docsID[docId]["count"]
+        termCount = document[1]
+        df = len(documents)
+        tfIDF = calculateTFIDF(termCount, totalWords, df)
+        rankedDocs.append((docId, tfIDF))
+    return rankedDocs
+
+def multiTermQuery(queryTokens):
+    results = {}
+    for tokenQuery in queryTokens:
+        if tokenQuery in vocab:
+            vocabID = vocab[tokenQuery]
+            documents = postings[vocabID]
+            results[vocabID] = documents
+
+    finalisedDocList = set()
+    for term in queryTokens:
+        vocabID = vocab[term]
+        documents = results[vocabID]
+        documentIDs = {doc[0] for doc in documents if doc[1] > 0}
+        finalisedDocList = finalisedDocList.union(documentIDs)
+
+    print(finalisedDocList)
+    docVector = {}
+    queryVector = generateQueryVector(expandedQuery)
+
+    for document in finalisedDocList:
+        docVector[document] = []
+        for term in expandedQuery:
+            vocabID = vocab[term]
+            docVector[document].append(generateDocTFIDF(document, vocabID))
+
+    rankedDocs = []
+    for document in docVector:
+        similarity = sim(queryVector, docVector[document])
+        rankedDocs.append((document, similarity))
+
+    return rankedDocs
 
 while True:
     query = input("What would you like to query? (type quit to exit) ")
@@ -111,54 +169,20 @@ while True:
     noPunct = query.translate(str.maketrans("", "", string.punctuation))
     tokenisedQuery = word_tokenize(noPunct.lower())
     expandedQuery = queryExpansion(tokenisedQuery)
-    print(expandedQuery)
 
-    try:
+    # try:
 
-        rankedDocs = []
-        if len(expandedQuery) == 1:
-            term = expandedQuery[0]
-            vocabID = vocab[term]
-            documents = postings[vocabID]
-            for document in documents:
-                docId = document[0]
-                totalWords = docsID[docId]["count"]
-                termCount = document[1]
-                df = len(documents)
-                tfIDF = calculateTFIDF(termCount, totalWords, df)
-                rankedDocs.append((docId, tfIDF))
-        else: 
-            results = {}
-            for tokenQuery in expandedQuery:
-                if tokenQuery in vocab:
-                    vocabID = vocab[tokenQuery]
-                    documents = postings[vocabID]
-                    results[vocabID] = documents
+    rankedDocs = []
+    if len(expandedQuery) == 1:
+        rankedDocs = singleTermQuery(expandedQuery)
+        print(rankedDocs)
+    else: 
+        rankedDocs = multiTermQuery(expandedQuery)
 
-            finalisedDocList = set()
-            for term in expandedQuery:
-                vocabID = vocab[term]
-                documents = results[vocabID]
-                documentIDs = {doc[0] for doc in documents if doc[1] > 0}
-                finalisedDocList = finalisedDocList.union(documentIDs)
+    rankedDocs = sorted(rankedDocs, key=lambda x: x[1], reverse=True)
+    print("\n")
+    for document in rankedDocs[:10]:
+        print(f"{docsID[document[0]]['name']} | {document[1]}\n{display(docsID[document[0]]['name'])}\n")
 
-            docVector = {}
-            queryVector = generateQueryVector(expandedQuery)
-
-            for document in finalisedDocList:
-                docVector[document] = []
-                for term in expandedQuery:
-                    vocabID = vocab[term]
-                    docVector[document].append(generateDocTFIDF(document, vocabID))
-            
-            for document in docVector:
-                similarity = sim(queryVector, docVector[document])
-                rankedDocs.append((document, similarity))
-
-        rankedDocs = sorted(rankedDocs, key=lambda x: x[1], reverse=True)
-        print("\n")
-        for document in rankedDocs[:10]:
-            print(f"{docsID[document[0]]['name']} | {document[1]}\n{display(docsID[document[0]]['name'])}\n")
-    
-    except Exception as e:
-        print(f"Word(s) not found try again! {e}")
+    # except Exception as e:
+    #     print(f"Word(s) not found try again! {e}")
