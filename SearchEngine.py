@@ -8,24 +8,43 @@ import numpy as np
 from nltk.corpus import stopwords, wordnet
 from nltk import pos_tag
 from bs4 import BeautifulSoup
+from PreProcessor import PreProcessor
 
 nltk.download('wordnet')
 nltk.download('punkt')
 nltk.download('stopwords')
-nltk.download('averaged_perceptron_tagger')
+nltk.download('averaged_perceptron_tagger_eng')
 nltk.download('tagsets')
 
 
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_lg")
 
-with open("docsID.pkl", "rb") as file:
-    docsID = pickle.load(file)
 
-with open("vocab.pkl", "rb") as file:
-    vocab = pickle.load(file)
+def loadPickleFiles(files):
+    data = {}
+    for filename in files:
+        with open(filename, "rb") as file:
+            data[filename] = pickle.load(file)
+    return data
 
-with open("postings.pkl", "rb") as file:
-    postings = pickle.load(file)
+try:
+    pickleFiles = ["docsID.pkl", "postings.pkl", "vocab.pkl"]
+    data = loadPickleFiles(pickleFiles)
+
+    docsID = data["docsID.pkl"]
+    vocab = data["vocab.pkl"]
+    postings = data["postings.pkl"]
+except:
+    preProcessor = PreProcessor()
+    preProcessor.run()
+
+    pickleFiles = ["docsID.pkl", "postings.pkl", "vocab.pkl"]
+    data = loadPickleFiles(pickleFiles)
+
+    docsID = data["docsID.pkl"]
+    vocab = data["vocab.pkl"]
+    postings = data["postings.pkl"]
+
 
 documents = list(docsID.keys())
 
@@ -96,8 +115,6 @@ def sim(query, doc):
     similarity = numerator / denominator 
 
     return similarity
-    
-    
 
 def display(file):
     file = open(f"videogames/ps2.gamespy.com/{file}")
@@ -125,21 +142,6 @@ def singleTermQuery(query):
     return rankedDocs
 
 def multiTermQuery(queryTokens):
-    # results = {}
-    # for tokenQuery in queryTokens:
-    #     if tokenQuery in vocab:
-    #         vocabID = vocab[tokenQuery]
-    #         documents = postings[vocabID]
-    #         results[vocabID] = documents
-    #
-    # finalisedDocList = set()
-    # for term in queryTokens:
-    #     vocabID = vocab[term]
-    #     documents = results[vocabID]
-    #     documentIDs = {doc[0] for doc in documents if doc[1] > 0}
-    #     finalisedDocList = finalisedDocList.union(documentIDs)
-    #
-    # print(finalisedDocList)
     docVector = {}
     queryVector = generateQueryVector(expandedQuery)
     print(len(queryVector))
@@ -168,19 +170,18 @@ while True:
     tokenisedQuery = word_tokenize(noPunct.lower())
     expandedQuery = queryExpansion(tokenisedQuery)
 
-    # try:
+    try:
 
-    rankedDocs = []
-    if len(expandedQuery) == 1:
-        rankedDocs = singleTermQuery(expandedQuery)
-        print(rankedDocs)
-    else: 
-        rankedDocs = multiTermQuery(expandedQuery)
+        rankedDocs = []
+        if len(expandedQuery) == 1:
+            rankedDocs = singleTermQuery(expandedQuery)
+        else:
+            rankedDocs = multiTermQuery(expandedQuery)
 
-    rankedDocs = sorted(rankedDocs, key=lambda x: x[1], reverse=True)
-    print("\n")
-    for document in rankedDocs[:10]:
-        print(f"{docsID[document[0]]['name']} | {document[1]}\n{display(docsID[document[0]]['name'])}\n")
+        rankedDocs = sorted(rankedDocs, key=lambda x: x[1], reverse=True)
+        print("\n")
+        for document in rankedDocs[:10]:
+            print(f"{docsID[document[0]]['name']} | {document[1]}\n{display(docsID[document[0]]['name'])}\n")
 
-    # except Exception as e:
-    #     print(f"Word(s) not found try again! {e}")
+    except Exception as e:
+        print(f"Word(s) not found try again! {e}")
