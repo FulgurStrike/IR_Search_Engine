@@ -93,10 +93,11 @@ def sim(query, doc):
     if denominator == 0:
         return 0
 
-    similarity = numerator / denominator
+    similarity = numerator / denominator 
 
     return similarity
-
+    
+    
 
 def display(file):
     file = open(f"videogames/ps2.gamespy.com/{file}")
