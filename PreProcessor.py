@@ -24,14 +24,24 @@ def createDocsID():
         for filename in sorted(files):
             docsID[count] = {}
             docsID[count]["name"] = (f"{filename}")
+            docsID[count]["count"] = totalWordsInDoc(f"{filename}")
             count += 1
 
+
+def totalWordsInDoc(file):
+    with open(f"videogames/ps2.gamespy.com/{file}") as file:
+        soup = BeautifulSoup(file, "html.parser")
+        body = soup.find("body").get_text(separator = " | ", strip = True)
+        noPunct = noPunct = body.translate(str.maketrans("", "", string.punctuation))
+        tokens = word_tokenize(noPunct.lower())
+    file.close()
+    
+    return len(tokens)
 
 
 def preProcessing(data, zoneWeighting, nerWeighting):
     noPunct = data.translate(str.maketrans("", "", string.punctuation))
     tokens = word_tokenize(noPunct.lower()) 
-    
     nlpDoc = nlp(" ".join(tokens))
     namedEntities = nlpDoc.ents
     lemmatizedTokens = [token.lemma_ for token in nlpDoc]
@@ -47,7 +57,7 @@ def preProcessing(data, zoneWeighting, nerWeighting):
     return cleanedTokens
 
 
-def Tokenizor(docID, text):
+def docPreProcessor(docID, text):
     soup = BeautifulSoup(text, 'html.parser')
     
     body = soup.find("div", {"id": "content"}).get_text(separator = " | ", strip = True) 
@@ -58,13 +68,11 @@ def Tokenizor(docID, text):
     nerWeightings = {"ORG": 3, "PRODUCT": 2, "GPE": 2, "PERSON": 1.5, "DATE": 1.2} 
     
     bodyTokens = preProcessing(body, 1, nerWeightings)
-    contentTitleTokens = preProcessing(contentTitlesText, 2, nerWeightings)
+    contentTitleTokens = preProcessing(contentTitlesText, 5, nerWeightings)
     titleTokens = preProcessing(title, 3, nerWeightings)
 
     combinedTokens = bodyTokens + contentTitleTokens + titleTokens
 
-    docsID[docID]["count"] = sum(combinedTokens.values())
-    
     return list(combinedTokens.items())
 
 
@@ -83,7 +91,7 @@ def createPostingsAndVocab():
     for document in docsID:
         try:
             with open(f"videogames/ps2.gamespy.com/{docsID[document]['name']}", "r") as file:
-                tokens = Tokenizor(document, file)
+                tokens = docPreProcessor(document, file)
                 
                 addToDict(tokens)
 

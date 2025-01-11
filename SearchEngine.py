@@ -27,6 +27,8 @@ with open("vocab.pkl", "rb") as file:
 with open("postings.pkl", "rb") as file:
     postings = pickle.load(file)
 
+documents = list(docsID.keys())
+
 
 def calculateTFIDF(termCount, totalWords, df):
     tf = (termCount) / (totalWords)
@@ -81,14 +83,20 @@ def eucLength(matrix):
     return math.sqrt(sum([x**2 for x in matrix]))
 
 def sim(query, doc):
+    
     numerator = np.dot(query, doc)
     queryLen = eucLength(query)
     docLen = eucLength(doc)
-
+    
     denominator = docLen * queryLen
+
+    if denominator == 0:
+        return 0
+
     similarity = numerator / denominator
 
     return similarity
+
 
 def display(file):
     file = open(f"videogames/ps2.gamespy.com/{file}")
@@ -106,53 +114,42 @@ def singleTermQuery(query):
     rankedDocs = [] 
     term = query[0]
     vocabID = vocab[term]
-    documents = postings[vocabID]
-
-    if len(documents) < 10:
-        difference = 10 - len(documents)
-        allDocuments = list(docsID.keys())
-        usedDocuments = {doc[0] for doc in documents}
-
-        for docId in allDocuments:
-            if docId not in usedDocuments:
-                documents.append((docId, 0))
-                difference -= 1
-                if difference == 0:
-                    break
     
-    for document in documents:
-        docId = document[0]
-        totalWords = docsID[docId]["count"]
-        termCount = document[1]
-        df = len(documents)
+    for docID in documents:
+        totalWords = docsID[docID]["count"]
+        termCount = next((posting[1] for posting in postings[vocabID] if posting[0] == docID), 0)
+        df = len(postings[vocabID])
         tfIDF = calculateTFIDF(termCount, totalWords, df)
-        rankedDocs.append((docId, tfIDF))
+        rankedDocs.append((docID, tfIDF))
     return rankedDocs
 
 def multiTermQuery(queryTokens):
-    results = {}
-    for tokenQuery in queryTokens:
-        if tokenQuery in vocab:
-            vocabID = vocab[tokenQuery]
-            documents = postings[vocabID]
-            results[vocabID] = documents
-
-    finalisedDocList = set()
-    for term in queryTokens:
-        vocabID = vocab[term]
-        documents = results[vocabID]
-        documentIDs = {doc[0] for doc in documents if doc[1] > 0}
-        finalisedDocList = finalisedDocList.union(documentIDs)
-
-    print(finalisedDocList)
+    # results = {}
+    # for tokenQuery in queryTokens:
+    #     if tokenQuery in vocab:
+    #         vocabID = vocab[tokenQuery]
+    #         documents = postings[vocabID]
+    #         results[vocabID] = documents
+    #
+    # finalisedDocList = set()
+    # for term in queryTokens:
+    #     vocabID = vocab[term]
+    #     documents = results[vocabID]
+    #     documentIDs = {doc[0] for doc in documents if doc[1] > 0}
+    #     finalisedDocList = finalisedDocList.union(documentIDs)
+    #
+    # print(finalisedDocList)
     docVector = {}
     queryVector = generateQueryVector(expandedQuery)
+    print(len(queryVector))
 
-    for document in finalisedDocList:
+    for document in documents:
         docVector[document] = []
         for term in expandedQuery:
             vocabID = vocab[term]
             docVector[document].append(generateDocTFIDF(document, vocabID))
+    
+    print(len(docVector[0]))
 
     rankedDocs = []
     for document in docVector:
